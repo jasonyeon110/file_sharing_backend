@@ -1,11 +1,12 @@
-require('dotenv').config();
-const multer = require('multer');
-const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
-const File = require('./models/File');
+require("dotenv").config();
+const multer = require("multer");
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const File = require("./models/File");
 
-const express = require('express');
+const express = require("express");
 const app = express();
+app.use(express.urlencoded({ extended: true }));
 const port = process.env.PORT;
 
 const upload = multer({dest: "uploads"});
@@ -27,9 +28,34 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         fileData.password = await bcrypt.hash(req.body.password, 10)
     }
 
-    const file = await File.create(fileData)
-    console.log(file)
-    res.send(file.originalName)
+    const file = await File.create(fileData);
+
+    res.render("index", { fileLink: `${req.headers.origin}/file/${file.id}`})
 });
+
+app.route('/file/:id').get(handleDownload).post(handleDownload)
+
+async function handleDownload(req, res) {
+    res.send(req.params.id)
+    const file = await File.findById(req.params.id);
+
+    if (file.password != null){
+        if(req.body.password == null){
+            res.render("password");
+            return
+        }
+
+        if (!(await bcrypt.compare(req.body.password, file.password))) {
+            res.render("password", { error: true })
+            return
+          }
+    }
+
+    file.downloadCount++
+    await file.save();
+    console.log(file.downloadCount);
+
+    res.download(file.path, file.originalName);
+}
 
 app.listen(port, () => console.log(`listening at localhost:${port}`))
